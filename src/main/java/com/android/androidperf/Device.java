@@ -3,6 +3,7 @@ package com.android.androidperf;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.scene.control.CheckBox;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,6 +48,7 @@ public class Device {
     private final ArrayList<BasePerfService> services = new ArrayList<>();
     private final ArrayList<Layer> layers = new ArrayList<>();
     private final ObservableList<String> packageList = FXCollections.observableArrayList();
+    private final Map<String, CheckBox> checkBoxOfNetworkInterface = new LinkedHashMap<>();
     private String lastLayerInfo = "";
     private String targetPackage;
     private int targetPackageUid;
@@ -322,6 +324,24 @@ public class Device {
             Platform.runLater(() -> {
                 controller.movePackageToFront(packageName);
             });
+        }
+    }
+
+    /**
+     * Periodically update current network interface status.
+     */
+    public void checkNetworkInterface() {
+        String []allInterface = execCmd("ifconfig -S | cut -d' ' -f1").split("\n");
+        if (allInterface.length > 0 && allInterface[0].startsWith("Error executing adb cmd"))
+            return;
+        checkBoxOfNetworkInterface.forEach((intf, checkBox) -> checkBox.setDisable(true));
+        for (String intf : allInterface) {
+            CheckBox checkBox = checkBoxOfNetworkInterface.computeIfAbsent(intf, s -> {
+                CheckBox cb = new CheckBox(s);
+                Platform.runLater(() -> controller.appendNetworkInterfaceToGridPane(cb));
+                return cb;
+            });
+            checkBox.setDisable(false);
         }
     }
 

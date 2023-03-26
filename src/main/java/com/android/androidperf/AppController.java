@@ -13,6 +13,7 @@ import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
+import javafx.scene.layout.GridPane;
 import javafx.scene.text.Text;
 import javafx.util.StringConverter;
 import org.apache.logging.log4j.LogManager;
@@ -44,6 +45,8 @@ public class AppController implements Initializable {
     @FXML
     private LineChart<Number, Number> lineChartNetwork;
     private final HashMap<String, LineChart<Number, Number>> lineChartMap = new HashMap<>();
+    @FXML
+    private GridPane networkInterfaceContainer;
 
     public Device selectedDevice;
     private final HashMap<String, Device> deviceMap = new HashMap<>();
@@ -79,8 +82,8 @@ public class AppController implements Initializable {
         updateUIOnStateChanges();
         packageListBox.setDisable(true);
 
-        // activate auto refresh task
-        executorService.scheduleAtFixedRate(this::refreshTask, 500, 500, TimeUnit.MILLISECONDS);
+//        // activate auto refresh task
+//        executorService.scheduleAtFixedRate(this::refreshTask, 500, 500, TimeUnit.MILLISECONDS);
     }
 
     private void updateDeviceList() {
@@ -216,25 +219,26 @@ public class AppController implements Initializable {
         };
 
         task.setOnRunning((e) -> dialog.show());
-        task.setOnSucceeded((e) -> {
-            Platform.runLater(() -> {
-                dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL);
-                dialog.close();
-                propTable.getItems().clear();
+        task.setOnSucceeded((e) -> Platform.runLater(() -> {
+            dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL);
+            dialog.close();
+            propTable.getItems().clear();
 
-                // initialize the package list
-                packageListBox.setItems(selectedDevice.getPackageList());
+            // initialize the package list
+            packageListBox.setItems(selectedDevice.getPackageList());
 
-                // initialize basic properties of the device
-                ArrayList<DeviceProp> props = selectedDevice.getProps();
-                ObservableList<DeviceProp> data = FXCollections.observableArrayList(props);
-                propTable.getItems().addAll(data);
+            // initialize basic properties of the device
+            ArrayList<DeviceProp> props = selectedDevice.getProps();
+            ObservableList<DeviceProp> data = FXCollections.observableArrayList(props);
+            propTable.getItems().addAll(data);
 
-                // UI update
-                updateUIOnStateChanges();
-                packageListBox.setDisable(false);
-            });
-        });
+            // UI update
+            updateUIOnStateChanges();
+            packageListBox.setDisable(false);
+
+            // activate auto refresh task
+            executorService.scheduleAtFixedRate(this::refreshTask, 0, 500, TimeUnit.MILLISECONDS);
+        }));
         task.setOnFailed((e) -> {
             dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CANCEL);
             dialog.close();
@@ -244,9 +248,16 @@ public class AppController implements Initializable {
         new Thread(task).start();
     }
 
+    public void appendNetworkInterfaceToGridPane(CheckBox checkBox) {
+        int curSize = networkInterfaceContainer.getChildren().size();
+        int numRow = networkInterfaceContainer.getRowCount();
+        networkInterfaceContainer.add(checkBox, curSize / numRow, curSize % numRow);
+    }
+
     private void refreshTask() {
         if (selectedDevice != null) {
             selectedDevice.checkCurrentPackage();
+            selectedDevice.checkNetworkInterface();
         }
     }
 
@@ -292,6 +303,7 @@ public class AppController implements Initializable {
         } else {
             packageListBox.getItems().clear();
             propTable.getItems().clear();
+            networkInterfaceContainer.getChildren().clear();
         }
     }
 
