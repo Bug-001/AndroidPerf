@@ -2,25 +2,50 @@ package com.android.androidperf;
 
 import javafx.application.Platform;
 import javafx.scene.chart.XYChart;
-import javafx.util.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class NetworkPerfService extends BasePerfService {
     private static final Logger LOGGER = LogManager.getLogger(NetworkPerfService.class);
-    private double lastRxBytes = 0;
-    private double lastTxBytes = 0;
+
+    public static final String SERVICE_NAME = "Network";
+    public static final String APP_STRING = "App";
+
+    @Override
+    public String getServiceName() {
+        return "Network";
+    }
 
     static class NetStatsData {
         public long mRxBytes = 0;
         public long mRxPackets = 0;
         public long mTxBytes = 0;
         public long mTxPackets = 0;
+
+        public NetStatsData() {}
+
+        public NetStatsData(long _mRxBytes, long _mRxPackets, long _mTxBytes, long _mTxPackets) {
+            mRxBytes = _mRxBytes;
+            mRxPackets = _mRxPackets;
+            mTxBytes = _mTxBytes;
+            mTxPackets = _mTxPackets;
+        }
+
+        public static NetStatsData subtract(NetStatsData l, NetStatsData r) {
+            var ret = new NetStatsData();
+            ret.mRxBytes = l.mRxBytes - r.mRxBytes;
+            ret.mRxPackets = l.mRxPackets - r.mRxPackets;
+            ret.mTxBytes = l.mTxBytes - r.mTxBytes;
+            ret.mTxPackets = l.mTxPackets - r.mTxPackets;
+            return ret;
+        }
     }
+
+    private Map<String, NetStatsData> lastStats = new LinkedHashMap<>();
 
     static long convertToLong(byte[] bytes, int index)
     {
@@ -45,42 +70,54 @@ public class NetworkPerfService extends BasePerfService {
         for (int i = 0; i < 4; i++) {
             data[i] = convertToLong(bytes, i * 8);
         }
-        NetStatsData netStatsData = new NetStatsData();
-        netStatsData.mRxBytes = data[0];
-        netStatsData.mRxPackets = data[1];
-        netStatsData.mTxBytes = data[2];
-        netStatsData.mTxPackets = data[3];
-        return netStatsData;
+        return new NetStatsData(data[0], data[1], data[2], data[3]);
     }
 
-    Pair<Double, Double> acquireNetworkData() {
+    Map<String, NetStatsData> acquireNetworkData() {
+        var ret = new LinkedHashMap<String, NetStatsData>();
+
+        // get traffic by contacting with AndroidPerfServer
         byte[] byteData = device.sendMSG(String.format("network %d", device.getTargetPackageUid()));
         NetStatsData netStatsData = fromBytes(byteData);
         LOGGER.debug(String.format("rx %d %d, tx %d %d", netStatsData.mRxBytes, netStatsData.mRxPackets, netStatsData.mTxBytes, netStatsData.mTxPackets));
-        return new Pair<>((double)netStatsData.mRxBytes/1024., (double)netStatsData.mTxBytes/1024.);
+        ret.put(APP_STRING, netStatsData);
+
+        // get interface traffic by reading /proc/net/dev, and analyse it
+        String []activeInterface = device.execCmd("ifconfig -S | cut -d' ' -f1").split("\n");
+        if (activeInterface.length > 0 && activeInterface[0].startsWith("Error executing adb cmd"))
+            return ret;
+
+        String cmd = "cat /proc/net/dev | awk '{sub(/:/,\"\",$1); print $1,$2,$3,$10,$11}'" + " | grep -Ei '" +
+                    String.join("|", activeInterface) + "'";
+        String []intfTraffic = device.execCmd(cmd).split("\n");
+        for (String traffic: intfTraffic) {
+            String []s_array = traffic.split(" ");
+            long []l_array = Arrays.stream(s_array, 1, 5).mapToLong(Long::parseLong).toArray();
+            NetStatsData data = new NetStatsData(l_array[0], l_array[1], l_array[2], l_array[3]);
+            ret.put(s_array[0], data);
+        }
+
+        return ret;
     }
 
     @Override
     void update() {
-        Pair<Double, Double> data = acquireNetworkData();
-        double rxBytes = 0.;
-        double txBytes = 0.;
+        var controller = device.getController();
+        var retrievedData = acquireNetworkData();
+        var chartAppendData = new LinkedHashMap<String, XYChart.Data<Number, Number>>();
 
-        if (lastRxBytes != 0 && lastTxBytes != 0) {
-            rxBytes += data.getKey() - lastRxBytes;
-            txBytes += data.getValue() - lastTxBytes;
-        }
-        lastRxBytes = data.getKey();
-        lastTxBytes = data.getValue();
+        if (retrievedData.size() == 0)
+            return;
 
-        double finalRxBytes = rxBytes;
-        double finalTxBytes = txBytes;
-        Platform.runLater(() -> device.getController()
-                .addDataToChart(
-                        "Network",
-                        new XYChart.Data<>(timer, finalRxBytes),
-                        new XYChart.Data<>(timer, finalTxBytes))
-        );
+        retrievedData.forEach((intf, data) -> {
+            var deltaData = NetStatsData.subtract(data, lastStats.computeIfAbsent(intf, k -> data));
+
+            chartAppendData.put(String.format("%s recv", intf), new XYChart.Data<>(timer, deltaData.mRxBytes / 1024));
+            chartAppendData.put(String.format("%s send", intf), new XYChart.Data<>(timer, deltaData.mTxBytes / 1024));
+        });
+
+        lastStats = retrievedData;
+        Platform.runLater(() -> chart.addDataToChart(chartAppendData));
 
         super.update();
     }

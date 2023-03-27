@@ -6,6 +6,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -16,6 +17,11 @@ public class FPSPerfService extends BasePerfService {
     boolean targetShouldChange = true;
 
     Future<?> updateLayerTask = null;
+
+    @Override
+    public String getServiceName() {
+        return "FPS";
+    }
 
     void clearLatencyData() {
         var layers = new ArrayList<>(device.getLayers());
@@ -200,7 +206,10 @@ public class FPSPerfService extends BasePerfService {
         double finalFps = fps;
         LOGGER.debug(String.format("%d / %f = %f", results.size(), totalTime / 1000, fps));
         LOGGER.debug("-------------------");
-        Platform.runLater(() -> device.getController().addDataToChart("FPS", new XYChart.Data<>(timer, finalFps)));
+        Platform.runLater(() -> chart.addDataToChart(Map.ofEntries(
+                        Map.entry("FPS", new XYChart.Data<>(timer, finalFps))
+                )
+        ));
         super.update();
     }
 

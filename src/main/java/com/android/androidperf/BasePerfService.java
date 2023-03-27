@@ -11,11 +11,18 @@ public class BasePerfService extends Thread {
     protected Future<?> dumpTask = null;
     protected ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
 
+    public String getServiceName() {
+        return "Base";
+    }
+
+    protected BaseLineChart chart = null;
+
     void dump() {}
     void update() {timer++;}
     void begin() {
         updateTask = executorService.scheduleAtFixedRate(this::update, 0, 1000, TimeUnit.MILLISECONDS);
         dumpTask = executorService.scheduleAtFixedRate(this::dump, 1000, 1000, TimeUnit.MILLISECONDS);
+        chart = device.getController().findChart(getServiceName());
     }
     void end() {
         if (updateTask != null)

@@ -4,12 +4,18 @@ import javafx.application.Platform;
 import javafx.scene.chart.XYChart;
 import javafx.util.Pair;
 
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class CPUPerfService extends BasePerfService {
     static private final Pattern totalCPUPattern = Pattern.compile(".* +([\\d.]+)");
     static private final Pattern totalCPUPatternOld = Pattern.compile("([\\d.]+)%");
+
+    @Override
+    public String getServiceName() {
+        return "CPU";
+    }
 
     Pair<Double, Double> acquireCPUData() {
         String info = device.execCmd("top -o CMDLINE,%CPU -n 1 -q -b -k%CPU");
@@ -56,12 +62,11 @@ public class CPUPerfService extends BasePerfService {
         double procUsage = data.getKey();
         double totalUsage = data.getValue();
 
-        Platform.runLater(() -> device.getController()
-                .addDataToChart(
-                        "CPU",
-                        new XYChart.Data<>(timer, procUsage / device.getCpuCores()),
-                        new XYChart.Data<>(timer, totalUsage / device.getCpuCores()))
-        );
+        Platform.runLater(() -> chart.addDataToChart(Map.ofEntries(
+                    Map.entry("App", new XYChart.Data<>(timer, procUsage / device.getCpuCores())),
+                    Map.entry("Total", new XYChart.Data<>(timer, totalUsage / device.getCpuCores()))
+            )
+        ));
 
         super.update();
     }

@@ -8,14 +8,9 @@ import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.geometry.Side;
-import javafx.scene.chart.LineChart;
-import javafx.scene.chart.NumberAxis;
-import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
 import javafx.scene.text.Text;
-import javafx.util.StringConverter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import se.vidstige.jadb.JadbDevice;
@@ -39,14 +34,14 @@ public class AppController implements Initializable {
     @FXML
     private Button perfBtn;
     @FXML
-    private LineChart<Number, Number> lineChartFPS;
+    private BaseLineChart lineChartFPS;
     @FXML
-    private LineChart<Number, Number> lineChartCPU;
+    private BaseLineChart lineChartCPU;
     @FXML
-    private LineChart<Number, Number> lineChartNetwork;
-    private final HashMap<String, LineChart<Number, Number>> lineChartMap = new HashMap<>();
+    private CheckableLineChart lineChartNetwork;
+    private final HashMap<String, BaseLineChart> lineChartMap = new HashMap<>();
     @FXML
-    private GridPane networkInterfaceContainer;
+    private GridPane checkerTable;
 
     public Device selectedDevice;
     private final HashMap<String, Device> deviceMap = new HashMap<>();
@@ -114,90 +109,17 @@ public class AppController implements Initializable {
     }
 
     private void initAllLineCharts() {
-        initLineChart(lineChartFPS, "FPS", new String[]{"FPS"}, 60, 10, "FPS");
-        initLineChart(lineChartCPU, "CPU", new String[]{"App", "Total"}, 100, 20, "%");
-        initLineChart(lineChartNetwork, "Network", new String[]{"Recv", "Send"}, 1000, 100, "KB/s");
+        lineChartFPS.initLineChart("FPS", new String[]{"FPS"}, "FPS");
+        lineChartMap.put("FPS", lineChartFPS);
+        lineChartCPU.initLineChart("CPU", new String[]{"App", "Total"}, "%");
+        lineChartMap.put("CPU", lineChartCPU);
+        lineChartNetwork.initLineChart("Network", new String[]{}, "KB/s");
+        lineChartNetwork.setCheckerTable(checkerTable);
+        lineChartMap.put("Network", lineChartNetwork);
     }
 
-    private void initLineChart(LineChart<Number, Number> lineChart, String chartName, String[] series, int yBound, int yTick, String yLabel) {
-        ObservableList<XYChart.Series<Number, Number>> seriesList = FXCollections.observableArrayList();
-        for (String s : series) {
-            XYChart.Series<Number, Number> data = new XYChart.Series<>();
-            data.setName(s);
-            seriesList.add(data);
-        }
-        lineChart.setData(seriesList);
-
-        lineChart.setAnimated(true);
-        lineChart.setTitle(chartName);
-
-        NumberAxis xAxis = (NumberAxis) lineChart.getXAxis();
-        xAxis.setLowerBound(0);
-        xAxis.setUpperBound(60);
-        xAxis.setTickUnit(4);
-        xAxis.setAutoRanging(false);
-        xAxis.setMinorTickVisible(false);
-        xAxis.setTickLabelFormatter(new StringConverter<>() {
-            @Override
-            public String toString(Number number) {
-                long time = number.longValue();
-                return String.format("%d:%02d", time / 60, time % 60);
-            }
-
-            @Override
-            public Number fromString(String s) {
-                return null;
-            }
-        });
-
-        NumberAxis yAxis = (NumberAxis) lineChart.getYAxis();
-        yAxis.setLowerBound(0);
-        yAxis.setUpperBound(yBound);
-        yAxis.setTickUnit(yTick);
-        yAxis.setLabel(yLabel);
-        yAxis.setAutoRanging(false);
-        yAxis.setMinorTickVisible(false);
-
-        lineChart.setLegendSide(Side.RIGHT);
-
-        lineChartMap.put(chartName, lineChart);
-    }
-
-    @SafeVarargs
-    public final void addDataToChart(String chartName, XYChart.Data<Number, Number>... dataArrays) {
-        LineChart<Number, Number> lineChart = lineChartMap.get(chartName);
-
-        double yMax = Double.MIN_VALUE;
-        for (int i = 0; i < dataArrays.length; i++) {
-            var data = dataArrays[i];
-            var series = lineChart.getData().get(i).getData();
-            int xVal = data.getXValue().intValue();
-            NumberAxis xAxis = (NumberAxis) lineChart.getXAxis();
-            double xBound = xAxis.getUpperBound();
-            if (xVal > xBound) {
-                xBound = xVal + 15;
-                xAxis.setUpperBound(xBound);
-                xAxis.setTickUnit(xAxis.getTickUnit() + 1);
-            }
-
-            Optional<XYChart.Data<Number, Number>> max = series.stream().max(Comparator.comparingDouble(fc -> fc.getYValue().doubleValue()));
-            if (max.isPresent()) {
-                double y = max.get().getYValue().doubleValue();
-                if (y > yMax)
-                    yMax = y;
-            }
-            series.add(data);
-        }
-
-        NumberAxis yAxis = (NumberAxis) lineChart.getYAxis();
-        int yBound = (int) yAxis.getUpperBound();
-        if (yMax == Double.MIN_VALUE)
-            yMax = yBound;
-        int desiredBound = (int) (Math.ceil((yMax / 5.) + 1) * 5);
-        if (yBound != desiredBound) {
-            yAxis.setUpperBound(desiredBound);
-            yAxis.setTickUnit(desiredBound / 5.);
-        }
+    public final BaseLineChart findChart(String chartName) {
+        return lineChartMap.get(chartName);
     }
 
     public void handleDeviceListBox() {
@@ -248,16 +170,9 @@ public class AppController implements Initializable {
         new Thread(task).start();
     }
 
-    public void appendNetworkInterfaceToGridPane(CheckBox checkBox) {
-        int curSize = networkInterfaceContainer.getChildren().size();
-        int numRow = networkInterfaceContainer.getRowCount();
-        networkInterfaceContainer.add(checkBox, curSize / numRow, curSize % numRow);
-    }
-
     private void refreshTask() {
         if (selectedDevice != null) {
             selectedDevice.checkCurrentPackage();
-            selectedDevice.checkNetworkInterface();
         }
     }
 
@@ -303,7 +218,7 @@ public class AppController implements Initializable {
         } else {
             packageListBox.getItems().clear();
             propTable.getItems().clear();
-            networkInterfaceContainer.getChildren().clear();
+            checkerTable.getChildren().clear();
         }
     }
 
