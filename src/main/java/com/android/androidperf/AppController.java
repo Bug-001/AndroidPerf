@@ -76,9 +76,6 @@ public class AppController implements Initializable {
         // UI update
         updateUIOnStateChanges();
         packageListBox.setDisable(true);
-
-//        // activate auto refresh task
-//        executorService.scheduleAtFixedRate(this::refreshTask, 500, 500, TimeUnit.MILLISECONDS);
     }
 
     private void updateDeviceList() {
@@ -113,8 +110,7 @@ public class AppController implements Initializable {
         lineChartMap.put("FPS", lineChartFPS);
         lineChartCPU.initLineChart("CPU", new String[]{"App", "Total"}, "%");
         lineChartMap.put("CPU", lineChartCPU);
-        lineChartNetwork.initLineChart("Network", new String[]{}, "KB/s");
-        lineChartNetwork.setCheckerTable(checkerTable);
+        lineChartNetwork.initLineChart("Network", new String[]{}, "KB/s", checkerTable);
         lineChartMap.put("Network", lineChartNetwork);
     }
 

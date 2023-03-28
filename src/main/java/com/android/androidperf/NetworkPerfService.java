@@ -73,6 +73,10 @@ public class NetworkPerfService extends BasePerfService {
         return new NetStatsData(data[0], data[1], data[2], data[3]);
     }
 
+    private boolean hasDataTransmitted(NetStatsData traffic) {
+        return traffic.mTxBytes != 0 || traffic.mRxBytes != 0;
+    }
+
     Map<String, NetStatsData> acquireNetworkData() {
         var ret = new LinkedHashMap<String, NetStatsData>();
 
@@ -102,7 +106,6 @@ public class NetworkPerfService extends BasePerfService {
 
     @Override
     void update() {
-        var controller = device.getController();
         var retrievedData = acquireNetworkData();
         var chartAppendData = new LinkedHashMap<String, XYChart.Data<Number, Number>>();
 
@@ -111,9 +114,11 @@ public class NetworkPerfService extends BasePerfService {
 
         retrievedData.forEach((intf, data) -> {
             var deltaData = NetStatsData.subtract(data, lastStats.computeIfAbsent(intf, k -> data));
-
-            chartAppendData.put(String.format("%s recv", intf), new XYChart.Data<>(timer, deltaData.mRxBytes / 1024));
-            chartAppendData.put(String.format("%s send", intf), new XYChart.Data<>(timer, deltaData.mTxBytes / 1024));
+            if (hasDataTransmitted(deltaData)) {
+                // Only show the interface that has traffic
+                chartAppendData.put(String.format("%s recv", intf), new XYChart.Data<>(timer, deltaData.mRxBytes / 1024));
+                chartAppendData.put(String.format("%s send", intf), new XYChart.Data<>(timer, deltaData.mTxBytes / 1024));
+            }
         });
 
         lastStats = retrievedData;
