@@ -50,7 +50,7 @@ public class CheckableLineChart extends BaseLineChart {
     public void addDataToChart(Map<String, Data<Number, Number>> points) {
         super.addDataToChart(points);
 
-        checkBoxMap.forEach((intf, checkBox) -> checkBox.setDisable(true));
+        checkBoxMap.forEach((intf, checkBox) -> checkBox.setStyle("-fx-text-fill: gray;"));
 
         points.forEach((seriesName, data) -> {
             checkBoxMap.computeIfAbsent(seriesName, s -> {
@@ -100,7 +100,7 @@ public class CheckableLineChart extends BaseLineChart {
                     checkerTable.add(cb, curSize / numRow, curSize % numRow);
                 });
                 return cb;
-            }).setDisable(false);
+            }).setStyle("-fx-text-fill: black;");
         });
     }
 
